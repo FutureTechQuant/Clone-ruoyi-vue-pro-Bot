@@ -148,4 +148,5 @@ jobs:
           SSH_KEY: ${{ secrets.SSH_KEY }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
+          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
         run: python3 tools/copy_secrets.py
