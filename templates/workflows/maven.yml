@@ -127,22 +127,6 @@ jobs:
             fi
             echo "✅ Cloudflare Tunnel 状态正常"
 
-      - name: Stop and remove nginx
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          port: ${{ secrets.SSH_PORT }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            if docker ps -a --filter "name=nginx" -q | grep -q .; then
-              docker stop nginx 2>/dev/null || true
-              docker rm   nginx 2>/dev/null || true
-              echo "✅ nginx 容器已停止并移除"
-            else
-              echo "ℹ️  nginx 容器不存在，跳过"
-            fi
-
       - name: Copy JAR to server
         uses: appleboy/scp-action@v1
         with:
