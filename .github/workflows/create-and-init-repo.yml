@@ -22,8 +22,7 @@ jobs:
     timeout-minutes: 30
 
     env:
-      GH_PAT: ${{ secrets.GH_PAT }}
-      OWNER: PeterKZhao
+      ORG: FutureTechQuant
       NEW_REPO: ${{ github.event.inputs.repo_name }}
       REPO_DESC: ${{ github.event.inputs.repo_description }}
       PRIVATE: ${{ github.event.inputs.private }}
@@ -31,6 +30,20 @@ jobs:
     steps:
       - name: Checkout Clone-Bot
         uses: actions/checkout@v4
+
+      - name: Generate GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ env.ORG }}
+
+      - name: Export APP_TOKEN
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "APP_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
 
       - name: Install Python dependencies
         run: pip install -q -r tools/requirements.txt
@@ -40,15 +53,15 @@ jobs:
         run: |
           set -euo pipefail
           CODE="$(curl -sS -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${GH_PAT}" \
+            -H "Authorization: Bearer ${APP_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${OWNER}/${NEW_REPO}")"
+            "https://api.github.com/repos/${ORG}/${NEW_REPO}")"
 
           if [ "${CODE}" = "200" ]; then
             curl -sS -o /dev/null -X DELETE \
-              -H "Authorization: Bearer ${GH_PAT}" \
+              -H "Authorization: Bearer ${APP_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${OWNER}/${NEW_REPO}"
+              "https://api.github.com/repos/${ORG}/${NEW_REPO}"
             sleep 3
           fi
 
@@ -81,7 +94,7 @@ jobs:
           (cd repo_content && python3 ../tools/split_api_biz.py)
           (cd repo_content && python3 ../tools/patch_application_local.py)
 
-      - name: Create new GitHub repo
+      - name: Create new GitHub repo (org)
         shell: bash
         run: |
           set -euo pipefail
@@ -91,9 +104,9 @@ jobs:
           RESP="$(curl -sS \
             -X POST \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_PAT}" \
+            -H "Authorization: Bearer ${APP_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/user/repos \
+            "https://api.github.com/orgs/${ORG}/repos" \
             -d "{
               \"name\": \"${NEW_REPO}\",
               \"description\": \"${REPO_DESC}\",
@@ -109,9 +122,9 @@ jobs:
 
           curl -sS -o /dev/null -X PATCH \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_PAT}" \
+            -H "Authorization: Bearer ${APP_TOKEN}" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${OWNER}/${NEW_REPO}" \
+            "https://api.github.com/repos/${ORG}/${NEW_REPO}" \
             -d '{"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_push_protection":{"status":"disabled"}}}' \
             || true
 
@@ -120,9 +133,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 配置 credential store，GitHub Actions 会自动对 PAT 脱敏
           git config --global credential.helper store
-          echo "https://${OWNER}:${GH_PAT}@github.com" > ~/.git-credentials
+          echo "https://x-access-token:${APP_TOKEN}@github.com" > ~/.git-credentials
 
           cd repo_content
           git init -q
@@ -131,22 +143,10 @@ jobs:
           git add .
           git commit -q -m "Initial commit: 梦开始的地方"
           git branch -M master
-          git remote add origin "https://github.com/${OWNER}/${NEW_REPO}.git"
+          git remote add origin "https://github.com/${ORG}/${NEW_REPO}.git"
           git push -q -u origin master
 
-          # 推送完成后立即清除凭据文件
           rm -f ~/.git-credentials
-
-      - name: Copy secrets to new repository
-        env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          REDIS_HOST: ${{ secrets.REDIS_HOST }}
-          REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
-          SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          SSH_PORT: ${{ secrets.SSH_PORT }}
-          SSH_USER: ${{ secrets.SSH_USER }}
-          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-        run: python3 tools/copy_secrets.py
+      #     SSH_USER: ${{ secrets.SSH_USER }}
+      #     CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      #   run: python3 tools/copy_secrets.py
