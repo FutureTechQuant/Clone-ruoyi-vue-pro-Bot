@@ -1,29 +1,42 @@
 import re
 from pathlib import Path
 
-# <!-- <module>xxx</module> -->
-MODULE_LINE = re.compile(r'^(\\s*)<!--\\s*(<module>([^<]+)</module>)\\s*-->\\s*$')
+TARGET_POM = Path("apps/future-server/pom.xml")
 
-# 识别 “<!-- <tag>...</tag> -->” 这种单行注释
-COMMENTED_XML_LINE = re.compile(r'^(\\s*)<!--\\s*(<[^!].*?)\\s*-->\\s*$')
-COMMENTED_XML_OPEN = re.compile(r'^(\\s*)<!--\\s*(<[^!].*?)\\s*$')   # 只有开头 <!--
-COMMENTED_XML_CLOSE = re.compile(r'^(.*?)(\\s*)-->\\s*$')           # 只有结尾 -->
+COMMENTED_XML_LINE = re.compile(r'^(\s*)<!--\s*(<[^!].*?)\s*-->\s*$')
+COMMENTED_XML_OPEN = re.compile(r'^(\s*)<!--\s*(<[^!].*?)\s*$')
+COMMENTED_XML_CLOSE = re.compile(r'^(.*?)(\s*)-->\s*$')
 
-DEP_START = re.compile(r'^\\s*<!--\\s*<dependency>\\s*-->\\s*$|^\\s*<!--\\s*<dependency>\\s*$')
+DEP_START = re.compile(r'^\s*<!--\s*<dependency>\s*-->\s*$|^\s*<!--\s*<dependency>\s*$')
 DEP_END = re.compile(r'.*</dependency>.*')
+ARTIFACT_ID = re.compile(r'<artifactId>\s*([^<]+)\s*</artifactId>')
 
-ARTIFACT_ID = re.compile(r'<artifactId>\\s*([^<]+)\\s*</artifactId>')
+ENABLE_ARTIFACTS = {
+    "future-module-member-biz",
+    "future-module-report-biz",
+    "future-module-bpm-biz",
+    "future-module-pay-biz",
+    "future-module-mp-biz",
+    "future-module-product-biz",
+    "future-module-promotion-biz",
+    "future-module-trade-biz",
+    "future-module-statistics-biz",
+    "future-module-crm-biz",
+    "future-module-erp-biz",
+    "future-module-ai-biz",
+    "future-module-iot-biz",
+}
 
 def uncomment_line(line: str) -> str:
     m = COMMENTED_XML_LINE.match(line)
     if m:
-        return f"{m.group(1)}{m.group(2)}\\n"
+        return f"{m.group(1)}{m.group(2)}\n"
     m = COMMENTED_XML_OPEN.match(line)
     if m:
-        return f"{m.group(1)}{m.group(2)}\\n"
+        return f"{m.group(1)}{m.group(2)}\n"
     m = COMMENTED_XML_CLOSE.match(line)
     if m:
-        return f"{m.group(1).rstrip()}\\n"
+        return f"{m.group(1).rstrip()}\n"
     return line
 
 def get_artifact_id(block_text: str):
@@ -32,10 +45,7 @@ def get_artifact_id(block_text: str):
 
 def should_enable_dep(block_text: str) -> bool:
     aid = get_artifact_id(block_text)
-    if not aid:
-        return False
-    # 只解注释 future-module-*（你要更激进的话，可以改成 return True）
-    return aid.startswith("future-module-")
+    return aid in ENABLE_ARTIFACTS
 
 def process_pom(pom: Path) -> bool:
     lines = pom.read_text(encoding="utf-8").splitlines(True)
@@ -44,15 +54,6 @@ def process_pom(pom: Path) -> bool:
     dep_buf = None
 
     for line in lines:
-        # modules 单行
-        m = MODULE_LINE.match(line)
-        if dep_buf is None and m:
-            module_name = m.group(3)
-            out.append(f"{m.group(1)}{m.group(2)}\\n")
-            changed = True
-            continue
-
-        # dependency 块缓冲
         if dep_buf is None:
             if DEP_START.match(line):
                 dep_buf = [line]
@@ -68,10 +69,9 @@ def process_pom(pom: Path) -> bool:
                     if "".join(new_block) != block_text:
                         changed = True
                 else:
-                    out.extend(dep_buf)  # 黑名单/不匹配：原样输出
+                    out.extend(dep_buf)
                 dep_buf = None
 
-    # 异常情况：dependency 注释块没闭合，原样写回，避免越修越坏
     if dep_buf is not None:
         out.extend(dep_buf)
 
@@ -80,19 +80,14 @@ def process_pom(pom: Path) -> bool:
     return changed
 
 def main():
-    root = Path(".")
-    poms = list(root.rglob("pom.xml"))
-    changed_cnt = 0
+    if not TARGET_POM.exists():
+        print(f"skip, not found: {TARGET_POM}")
+        return
 
-    for pom in poms:
-        try:
-            if process_pom(pom):
-                print(f"✅ updated: {pom}")
-                changed_cnt += 1
-        except Exception as e:
-            print(f"❌ failed: {pom} -> {e}")
-
-    print(f"🎉 done. changed pom count = {changed_cnt}")
+    if process_pom(TARGET_POM):
+        print(f"updated: {TARGET_POM}")
+    else:
+        print(f"no changes: {TARGET_POM}")
 
 if __name__ == "__main__":
     main()
