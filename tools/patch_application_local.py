@@ -29,7 +29,7 @@ def patch_application_local_yaml():
     print("  ➜ 替换主数据源 URL 为 PostgreSQL...")
     content = content.replace(
         '          url: jdbc:mysql://127.0.0.1:3306/future-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例',
-        '          url: jdbc:mysql://${DB_HOST}:3306/future-vue-pro?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例'
+        '          url: jdbc:mysql://${DB_HOST}:3306/multi-services-platform?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&nullCatalogMeansCurrent=true&rewriteBatchedStatements=true # MySQL Connector/J 8.X 连接的示例'
 #         '          url: jdbc:postgresql://:5432/future-vue-pro'
     )
     
