@@ -20,7 +20,7 @@ ROOT_MODULES_XML = """<modules>
     </modules>"""
 
 # 目录移动计划：key=旧目录（相对 repo 根），value=新目录
-# 注意：这里只移动"顶层模块目录"。模块内部结构保持原样。
+# 注意：这里移动的是整个模块目录
 MOVE_PLAN = {
     "future-dependencies": "platform/future-dependencies",
     "future-framework": "platform/future-framework",
@@ -160,21 +160,25 @@ def write_aggregator_pom(pom_path: Path, artifact_id: str, modules: list[str]):
 
 def move_custom_modules():
     """
-    移动不在MOVE_PLAN中的future-module-xxx模块到modules/custom/xxx
+    移动不在MOVE_PLAN中的future-module-xxx模块到modules/custom/xxx/future-module-xxx
+    这样能保持原有的模块结构
     """
     custom_base = Path("modules/custom")
-    custom_modules = []
+    custom_module_dirs = []  # 存储custom下的模块目录名，如['talent', 'other']
     
     # 扫描当前目录下以"future-module-"开头的目录
     for item in Path(".").iterdir():
         if item.is_dir() and item.name.startswith("future-module-") and item.name not in MOVE_PLAN:
             # 从目录名中提取模块名（去掉"future-module-"前缀）
             module_name = item.name[len("future-module-"):]
-            dst = custom_base / module_name
+            # 目标路径: modules/custom/{module_name}/{original_dir_name}
+            dst_dir = custom_base / module_name
+            dst = dst_dir / item.name
             move_dir(item, dst)
-            custom_modules.append(module_name)
+            custom_module_dirs.append(module_name)
+            print(f"📦 自定义模块 '{item.name}' 移动到: {dst}")
     
-    return custom_modules
+    return custom_module_dirs
 
 
 def main():
@@ -187,9 +191,9 @@ def main():
     
     # 2) 移动自定义模块
     print("\n🔍 扫描并移动自定义模块...")
-    custom_modules = move_custom_modules()
-    if custom_modules:
-        print(f"✅ 已移动 {len(custom_modules)} 个自定义模块到 modules/custom/")
+    custom_module_dirs = move_custom_modules()
+    if custom_module_dirs:
+        print(f"✅ 已移动 {len(custom_module_dirs)} 个自定义模块到 modules/custom/")
     
     # 3) 先 patch root pom 的 modules，让 reactor 能找到新路径下的模块
     patch_root_modules(ROOT_POM)
@@ -197,7 +201,7 @@ def main():
     # 4) 生成你要的 modules/ 聚合层
     # 动态构建modules列表
     modules_list = ["core", "biz", "extend"]
-    if custom_modules:  # 如果有自定义模块，就加入custom
+    if custom_module_dirs:  # 如果有自定义模块，就加入custom
         modules_list.append("custom")
     write_aggregator_pom(Path("modules/pom.xml"), "future-modules", modules_list)
 
@@ -211,16 +215,17 @@ def main():
     write_aggregator_pom(Path("modules/extend/pom.xml"), "future-modules-extend", extend_list)
     
     # 如果有自定义模块，生成custom聚合pom
-    if custom_modules:
-        write_aggregator_pom(Path("modules/custom/pom.xml"), "future-modules-custom", custom_modules)
-        # 为每个自定义模块生成对应的聚合pom
-        for module in custom_modules:
-            # 自定义模块的目录名是去掉前缀后的名称
-            module_dir_name = f"future-module-{module}"
+    if custom_module_dirs:
+        write_aggregator_pom(Path("modules/custom/pom.xml"), "future-modules-custom", custom_module_dirs)
+        # 为每个自定义模块目录生成聚合pom
+        for module_dir in custom_module_dirs:
+            # 自定义模块的完整目录名
+            full_module_name = f"future-module-{module_dir}"
+            # 聚合pom放在 modules/custom/{module_dir}/pom.xml
             write_aggregator_pom(
-                Path(f"modules/custom/{module}/pom.xml"), 
-                f"future-custom-{module}", 
-                [module_dir_name]
+                Path(f"modules/custom/{module_dir}/pom.xml"), 
+                f"future-custom-{module_dir}", 
+                [full_module_name]
             )
 
     # 5) 每个域下面再放一个"目录级聚合 pom"，让结构更清晰
@@ -254,8 +259,8 @@ def main():
             raise RuntimeError(f"❌ failed to patch {pom}: {e}") from e
 
     print(f"🎉 done. patched parent relativePath count = {changed}")
-    if custom_modules:
-        print(f"📦 自定义模块 ({len(custom_modules)} 个): {', '.join(custom_modules)}")
+    if custom_module_dirs:
+        print(f"📦 自定义模块 ({len(custom_module_dirs)} 个): {', '.join(custom_module_dirs)}")
 
 
 if __name__ == "__main__":
