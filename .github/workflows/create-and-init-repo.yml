@@ -74,7 +74,7 @@ jobs:
             https://github.com/FutureTechQuant/ruoyi-vue-pro.git source
 
           rm -rf source/.git source/.gitee source/.github source/.image \
-                 source/Readme.md source/yudao-ui source/sql
+                 source/Readme.md source/yudao-ui
 
           (cd source && python3 ../tools/replace_all.py)
 
